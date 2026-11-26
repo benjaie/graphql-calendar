@@ -97,3 +97,18 @@ The sync workflow (`.github/workflows/calendar-sync.yml`) needs two repository s
 Share the target calendar with the service account's email address with the **"Make changes to events"** permission.
 
 The workflow is incremental: on each push to `main` it only creates, updates or deletes the events of the files that changed in that push. Events not backed by a file in `calendar/` are never touched.
+
+## How it works
+
+The sync is driven by `git diff`. On each push to `main`, `scripts/sync.ts` diffs `calendar/` between the previous tip of `main` and the new one, and only acts on the files that changed:
+
+- **added or modified** files: the matching calendar event is created, or updated if it already exists.
+- **deleted** files: the matching calendar event is removed.
+- a **renamed** file counts as a deletion plus an addition.
+
+Each event gets a stable Google Calendar ID derived from its date and slug (a hash of `<date>/<slug>`), so the script always knows which calendar event belongs to which file without keeping any state.
+
+This has two benefits:
+
+- **No full rebuild.** The calendar is never wiped and recreated from scratch: a push that touches one file makes one or two API calls, whatever the number of events in the repository.
+- **Events created outside this repository keep working.** The script only ever touches the event IDs it computes from files in `calendar/`. Events added directly in Google Calendar have other IDs, so they are never modified or deleted by the sync.
