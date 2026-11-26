@@ -1,8 +1,0 @@
-startTime: "12:00"
-endTime: "13:00"
-timeZone: America/New_York
-type: meeting
-title: test event
-location: Online
-description: Test event. Safe to delete.
-link: https://github.com/graphql/working-sessions
