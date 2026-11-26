@@ -14,11 +14,9 @@ interface CalendarFS {
 }
 
 function checkPath(path: unknown, files: CalendarFS): asserts path is string {
-  if (typeof path !== 'string' || !path.startsWith('calendar/') || !/\.ya?ml$/.test(path) || /[\\\x00-\x1f]/.test(path)) throw Error('Expected a calendar YAML path')
-  const parts = path.split('/')
+  if (typeof path !== 'string' || !/^calendar\/(?:[A-Za-z0-9_-]+\/)*[A-Za-z0-9_-]+\.ya?ml$/.test(path)) throw Error('Invalid calendar path')
   let prefix = ''
-  for (const part of parts) {
-    if (!part || part === '.' || part === '..' || part.toLowerCase() === '.git') throw Error('Invalid calendar path')
+  for (const part of path.split('/')) {
     prefix = prefix ? prefix + '/' + part : part
     const stat = files.lstatSync(prefix, { throwIfNoEntry: false })
     if (stat && !(prefix === path ? stat.isFile() : stat.isDirectory())) throw Error('Expected regular files and directories')
