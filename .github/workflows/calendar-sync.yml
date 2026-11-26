@@ -22,7 +22,7 @@ jobs:
           fetch-depth: 0 # the push's previous commit is needed to diff against
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 24
       - run: npm ci --no-audit --no-fund
       - name: Sync
         run: |
@@ -31,7 +31,7 @@ jobs:
           if [ "$BASE_SHA" = "0000000000000000000000000000000000000000" ]; then
             export BASE_SHA=4b825dc642cb6eb9a060e54bf8d69288fbee4904
           fi
-          node scripts/sync.mjs
+          node scripts/sync.ts
         env:
           BASE_SHA: ${{ github.event.before }}
           GOOGLE_SERVICE_ACCOUNT_KEY: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_KEY }}

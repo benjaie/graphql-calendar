@@ -79,11 +79,12 @@ Delete the file in a pull request. The event is removed from the Google Calendar
 
 ## Validation
 
-You can check your changes locally (Node 20+):
+You can check your changes locally (Node 24):
 
 ```sh
 npm ci
-node scripts/sync.mjs --validate
+npm run typecheck
+node scripts/sync.ts --validate
 ```
 
 ## Maintainers: setup
