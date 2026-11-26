@@ -6,8 +6,7 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: calendar-sync
-  queue: max
+  group: calendar-cron
 
 permissions:
   contents: write

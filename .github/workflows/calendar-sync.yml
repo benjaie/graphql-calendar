@@ -9,7 +9,6 @@ on:
 # Never run two syncs at once
 concurrency:
   group: calendar-sync
-  queue: max
 
 permissions:
   contents: read
