@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os'
 import { basename, dirname, join, resolve } from 'node:path'
 import yaml from 'js-yaml'
 import { generateAgendas, getAgendaDate, getAgendaDetails, looksLikeItMightHaveBeenCancelled } from 'wgutils'
-import { parseEvent } from './sync.ts'
+import { parseEventContents } from './sync.ts'
 import { agendaOverview, generatedMarker, localTime, tentative, zoomPassword } from './wg-event.ts'
 
 type Config = Parameters<typeof getAgendaDetails>[0]
@@ -35,7 +35,6 @@ const introductions: Record<string, string> = {
 const now = new Date()
 const until = Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 4, 1)
 const inWindow = (date: Date) => +date >= +now && +date < until
-const scratch = mkdtempSync(join(tmpdir(), 'calendar-wg-'))
 const desired = new Map<string, string>()
 const unparseableSources = new Set<string>()
 const git = (cwd: string, ...args: string[]) => execFileSync('git', args, { cwd, encoding: 'utf8' }).trim()
@@ -65,7 +64,71 @@ function fallbackEnd(start: string, range: string) {
   return new Date(Date.parse(start) + minutes * 60000).toISOString()
 }
 
-async function collect(repo: string) {
+export function calendarEvent({
+  repo,
+  branch,
+  file,
+  contents,
+  config,
+  meeting,
+  baseline,
+  secondary,
+}: {
+  repo: string
+  branch: string
+  file: string
+  contents: string
+  config: Pick<Config, 'time' | 'timezone' | 'description' | 'name'>
+  meeting: Meeting
+  baseline: Pick<Meeting, 'attendees'>
+  secondary?: { time: string; description?: string }
+}) {
+  const start = localTime(meeting.start, config.timezone)
+  const topics = agendaOverview(meeting.topics)
+  const participants = meeting.attendees.filter(
+    (a) =>
+      !baseline.attendees.some((b) =>
+        a.github && b.github ? a.github.toLowerCase() === b.github.toLowerCase() : a.name.trim().toLowerCase() === b.name.trim().toLowerCase(),
+      ),
+  )
+  const notice = tentative(!!topics.length, !!participants.length)
+  const endUtc = meeting.end ?? fallbackEnd(meeting.start, secondary?.time ?? config.time)
+  const end = localTime(endUtc, config.timezone)
+  const intro =
+    introductions[repo] ??
+    (secondary?.description ?? config.description ?? config.name)
+      .trim()
+      .split(/\n\s*\n/)[0]
+      .replace(/\n/g, ' ')
+      .replace(/\[([^\]]+)\](?:\[.*?\]|\([^)]*\))/g, '$1')
+  const link = `https://github.com/graphql/${repo}/blob/${branch}/${file.split('/').map(encodeURIComponent).join('/')}`
+  const password = zoomPassword(contents)
+  return {
+    startTime: start.time,
+    endTime: end.time,
+    timeZone: config.timezone,
+    startUtc: meeting.start,
+    endUtc,
+    ...(start.date === end.date ? {} : { endDay: end.date }),
+    type: 'working group',
+    title: (notice ? 'Be first: ' : '') + meeting.title,
+    location: link,
+    description: [
+      notice,
+      password && `Zoom password: ${password}`,
+      intro,
+      'How to join: https://graphql.org/community/contribute/project-meetings/',
+      topics.length ? 'Agenda topics:\n' + topics.map((t) => '- ' + t).join('\n') : 'Agenda is open, submit your discussion topics',
+      link,
+      'This description is updated roughly once every 12 hours.',
+    ]
+      .filter(Boolean)
+      .join('\n\n'),
+    link,
+  }
+}
+
+async function collect(repo: string, scratch: string) {
   const dir = refresh(repo)
   const config: Config = (await import(join(dir, 'wg.config.js'))).default
   const folder = join(config.repoSubpath ?? '', config.agendasFolder ?? 'agendas')
@@ -124,53 +187,11 @@ async function collect(repo: string) {
         templates.set(template, await one(config, read(template).replace(/\?iso=\d{8}T\d{6}&/, '?iso=20991201T120000&')))
       }
       const baseline = templates.get(template)!
-      const topics = agendaOverview(meeting.topics)
-      const participants = meeting.attendees.filter(
-        (a) =>
-          !baseline.attendees.some((b) =>
-            a.github && b.github ? a.github.toLowerCase() === b.github.toLowerCase() : a.name.trim().toLowerCase() === b.name.trim().toLowerCase(),
-          ),
-      )
-      const notice = tentative(!!topics.length, !!participants.length)
       const secondary = config.secondaryMeetings?.find((s) => s.filenameFragment && basename(template).slice(3) === s.filenameFragment + '.md')
-      const endUtc = meeting.end ?? fallbackEnd(meeting.start, secondary?.time ?? config.time)
-      const end = localTime(endUtc, config.timezone)
-      const intro =
-        introductions[repo] ??
-        (secondary?.description ?? config.description ?? config.name)
-          .trim()
-          .split(/\n\s*\n/)[0]
-          .replace(/\n/g, ' ')
-          .replace(/\[([^\]]+)\](?:\[.*?\]|\([^)]*\))/g, '$1')
-      const link = `https://github.com/graphql/${repo}/blob/${branch}/${file.split('/').map(encodeURIComponent).join('/')}`
-      const password = zoomPassword(contents)
-      const event = {
-        startTime: start.time,
-        endTime: end.time,
-        timeZone: config.timezone,
-        startUtc: meeting.start,
-        endUtc,
-        ...(start.date === end.date ? {} : { endDay: end.date }),
-        type: 'working group',
-        title: (notice ? 'Be first: ' : '') + meeting.title,
-        location: link,
-        description: [
-          notice,
-          password && `Zoom password: ${password}`,
-          intro,
-          'How to join: https://graphql.org/community/contribute/project-meetings/',
-          topics.length ? 'Agenda topics:\n' + topics.map((t) => '- ' + t).join('\n') : 'Agenda is open, submit your discussion topics',
-          link,
-          'This description is updated roughly once every 12 hours.',
-        ]
-          .filter(Boolean)
-          .join('\n\n'),
-        link,
-      }
+      const event = calendarEvent({ repo, branch, file, contents, config, meeting, baseline, secondary })
       const path = `calendar/${year}/${start.date.slice(5)}-${repo}-${createHash('sha256').update(file).digest('hex').slice(0, 10)}.yaml`
       const body = generatedMarker + repo + '/' + file + '\n' + yaml.dump(event, { lineWidth: -1, quotingType: '"' })
-      writeFileSync('candidate.yaml', body)
-      const parsed = parseEvent(join(work, 'candidate.yaml'), path)
+      const parsed = parseEventContents(body, path)
       if ('errors' in parsed) throw Error(parsed.errors.join(', '))
       desired.set(path, body)
     } catch (cause) {
@@ -179,13 +200,9 @@ async function collect(repo: string) {
   }
 }
 
-try {
-  mkdirSync(join(root, 'repos'), { recursive: true })
-  for (const repo of repos) await collect(repo)
-  process.chdir(root)
+export function obsoleteEvents(existing: Map<string, string>, desired: Map<string, string>, unparseableSources: Set<string>) {
   const remove: string[] = []
-  for (const file of globSync('calendar/*/*.yaml')) {
-    const contents = read(file)
+  for (const [file, contents] of existing) {
     if (desired.has(file) && contents.split('\n')[0] !== desired.get(file)!.split('\n')[0]) throw Error(`Event path collision: ${file}`)
     if (!contents.startsWith(generatedMarker) || desired.has(file)) continue
     const source = contents.split('\n')[0].slice(generatedMarker.length)
@@ -193,13 +210,25 @@ try {
     if (unparseableSources.has(source)) throw Error(`Previously imported agenda has no recognized start: ${source}`)
     remove.push(file)
   }
-  for (const [file, body] of desired) {
-    mkdirSync(dirname(file), { recursive: true })
-    if (!existsSync(file) || read(file) !== body) writeFileSync(file, body)
+  return remove
+}
+
+if (process.argv[1] && resolve(process.argv[1]) === import.meta.filename) {
+  const scratch = mkdtempSync(join(tmpdir(), 'calendar-wg-'))
+  try {
+    mkdirSync(join(root, 'repos'), { recursive: true })
+    for (const repo of repos) await collect(repo, scratch)
+    process.chdir(root)
+    const existing = new Map(globSync('calendar/*/*.yaml').map((file) => [file, read(file)]))
+    const remove = obsoleteEvents(existing, desired, unparseableSources)
+    for (const [file, body] of desired) {
+      mkdirSync(dirname(file), { recursive: true })
+      if (existing.get(file) !== body) writeFileSync(file, body)
+    }
+    for (const file of remove) rmSync(file)
+    console.log(`${desired.size} upcoming WG events, ${remove.length} removed`)
+  } finally {
+    process.chdir(root)
+    rmSync(scratch, { recursive: true, force: true })
   }
-  for (const file of remove) rmSync(file)
-  console.log(`${desired.size} upcoming WG events, ${remove.length} removed`)
-} finally {
-  process.chdir(root)
-  rmSync(scratch, { recursive: true, force: true })
 }

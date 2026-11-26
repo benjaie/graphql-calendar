@@ -81,6 +81,14 @@ function parsePath(path: string) {
 
 export function parseEvent(file: string, logicalPath?: string): CalendarEvent | InvalidEvent {
   const path = logicalPath ?? relative(repoRoot, file)
+  try {
+    return parseEventContents(readFileSync(file, 'utf8'), path)
+  } catch (e) {
+    return { path, errors: [String(e)] }
+  }
+}
+
+export function parseEventContents(contents: string, path: string): CalendarEvent | InvalidEvent {
   const errors: string[] = []
   const { date, slug, error } = parsePath(path)
   if (error) errors.push(error)
@@ -88,7 +96,6 @@ export function parseEvent(file: string, logicalPath?: string): CalendarEvent | 
   let generated: boolean
   let data: unknown
   try {
-    const contents = readFileSync(file, 'utf8')
     generated = contents.startsWith(generatedMarker)
     data = yaml.load(contents)
   } catch (e) {
