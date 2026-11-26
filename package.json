@@ -17,7 +17,9 @@
     "format:check": "prettier --check .",
     "typecheck": "tsc --noEmit",
     "validate": "node scripts/sync.ts --validate",
-    "sync": "node scripts/sync.ts"
+    "sync": "node scripts/sync.ts",
+    "generate:wg": "node scripts/generate-wg.ts",
+    "test": "node --test scripts/*.test.ts"
   },
   "devDependencies": {
     "@tsconfig/node-ts": "^23.6.5",

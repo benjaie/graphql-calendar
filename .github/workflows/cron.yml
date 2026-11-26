@@ -1,0 +1,58 @@
+name: Refresh working group agendas
+
+on:
+  schedule:
+    - cron: '17 0,12 * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: calendar-sync
+
+permissions:
+  contents: write
+
+jobs:
+  refresh:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - uses: actions/cache@v4
+        with:
+          path: repos/
+          key: wg-checkouts-v1-${{ github.run_id }}
+          restore-keys: wg-checkouts-v1-
+      - run: npm ci --no-audit --no-fund
+      - run: npm run generate:wg
+      - run: npm run validate
+      - name: Commit changed calendar entries
+        id: commit
+        run: |
+          git add -- calendar/
+          if git diff --cached --quiet; then exit 0; fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'Refresh working group calendar events'
+          echo "base=$(git rev-parse HEAD^)" >> "$GITHUB_OUTPUT"
+      - name: Sync the generated commit
+        if: steps.commit.outputs.base != ''
+        env:
+          BASE_SHA: ${{ steps.commit.outputs.base }}
+          GOOGLE_SERVICE_ACCOUNT_KEY: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_KEY }}
+          GOOGLE_CALENDAR_ID: ${{ secrets.GOOGLE_CALENDAR_ID }}
+        run: |
+          test "$(git ls-remote origin refs/heads/main | cut -f1)" = "$BASE_SHA"
+          npm run sync
+      - name: Push the synced commit
+        if: steps.commit.outputs.base != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh auth setup-git
+          git push origin HEAD:main
