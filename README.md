@@ -48,7 +48,7 @@ link: https://github.com/graphql/working-sessions
 | `description` | Free text description.                                                                                                                                                       |
 | `link`        | `http(s)` URL with more information (agenda, notes, ...). It is also appended to the calendar event description.                                                             |
 
-The calendar event description starts with the type and, if set, the host:
+For hand-authored events, the calendar description starts with the type and, if set, the host:
 
 ```
 type: conference
@@ -117,6 +117,8 @@ This has two benefits:
 ## Working group agendas
 
 Run `npm ci` and `npm run generate:wg` at the repository root with Node 24. The generator clones and refreshes the eleven working group repositories under the gitignored `repos/` directory. It uses the calendar repository's installation of wgutils and each checkout's configuration, including nested agenda directories. Review the changes with `git status` and run `npm run validate`. Local generation requires no Google credentials.
+
+Generated WG descriptions are synced verbatim. They open with the “Be first” notice when applicable, followed by the Zoom password if the agenda provides one.
 
 The importer covers upcoming meetings through the end of the third following UTC month. It marks files with their source path and removes future generated events when their agenda disappears or wgutils recognizes a cancellation. The paired optional fields `startUtc` and `endUtc` preserve exact instants alongside WG-local dates and times.
 

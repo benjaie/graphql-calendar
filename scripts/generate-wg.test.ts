@@ -64,7 +64,7 @@ test('refreshes nested agendas, preserves events on import failure, and reconcil
   month.setUTCMonth(month.getUTCMonth() + 1)
   const date = month.toISOString().slice(0, 10)
   const file = join(upstream, 'working-group/agendas/meeting.md')
-  const agenda = `# Fixture meeting\n\nhttps://www.timeanddate.com/worldclock/converter.html?iso=${date.replaceAll('-', '')}T100000&p1=0\n\n## Attendees\n\n| Name | GitHub | Organization | Location |\n| --- | --- | --- | --- |\n| Host | @HOST | | |\n\n## Agenda\n\n1. A new topic\n`
+  const agenda = `# Fixture meeting\n\nhttps://www.timeanddate.com/worldclock/converter.html?iso=${date.replaceAll('-', '')}T100000&p1=0\n\n  - _Password:_ fixture123\n\n## Attendees\n\n| Name | GitHub | Organization | Location |\n| --- | --- | --- | --- |\n| Host | @HOST | | |\n\n## Agenda\n\n1. A new topic\n`
   const run = () => execFileSync(process.execPath, ['scripts/generate-wg.ts'], { cwd: dir, env, stdio: 'pipe' })
   writeFileSync(file, agenda)
   publish(upstream)
@@ -73,9 +73,11 @@ test('refreshes nested agendas, preserves events on import failure, and reconcil
   const read = () => readFileSync(join(dir, event), 'utf8')
   const before = read()
   const parsed = yaml.load(before) as Record<string, string>
-  assert.equal(parsed.title, 'TBC: Fixture meeting')
+  assert.equal(parsed.title, 'Be first: Fixture meeting')
   assert.equal(parsed.endUtc, date + 'T11:00:00.000Z')
-  assert.match(parsed.description, /no signed-up participants/)
+  assert.match(parsed.description, /^\*\*Be first\*\*: no attendees/)
+  assert.equal(parsed.description.split('\n\n')[1], 'Zoom password: fixture123')
+  assert.match(parsed.description, /updated roughly once every 12 hours\.$/)
   assert.match(parsed.location, /working-group\/agendas\/meeting.md$/)
   writeFileSync(file, '# Missing start')
   publish(upstream)

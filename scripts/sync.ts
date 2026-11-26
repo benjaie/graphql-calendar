@@ -9,7 +9,7 @@ import { createHash } from 'node:crypto'
 import { readdirSync, readFileSync, existsSync } from 'node:fs'
 import { join, relative, resolve } from 'node:path'
 import { google } from 'googleapis'
-import { localTime } from './wg-event.ts'
+import { generatedMarker, localTime } from './wg-event.ts'
 import yaml from 'js-yaml'
 
 const repoRoot = resolve(import.meta.dirname, '..')
@@ -26,6 +26,7 @@ type CalendarEvent = RequiredFields & {
   endDay: string
   startUtc?: string
   endUtc?: string
+  generated: boolean
   hostedBy?: string
 }
 type InvalidEvent = { path: string; errors: string[] }
@@ -84,9 +85,12 @@ export function parseEvent(file: string, logicalPath?: string): CalendarEvent | 
   const { date, slug, error } = parsePath(path)
   if (error) errors.push(error)
 
+  let generated: boolean
   let data: unknown
   try {
-    data = yaml.load(readFileSync(file, 'utf8'))
+    const contents = readFileSync(file, 'utf8')
+    generated = contents.startsWith(generatedMarker)
+    data = yaml.load(contents)
   } catch (e) {
     return { path, errors: [...errors, `invalid YAML: ${e instanceof Error ? e.message : String(e)}`] }
   }
@@ -152,7 +156,7 @@ export function parseEvent(file: string, logicalPath?: string): CalendarEvent | 
   }
   if (errors.length) return { path, errors }
 
-  return { ...data, path, date, slug, endDay, hostedBy }
+  return { ...data, path, date, slug, endDay, hostedBy, generated }
 }
 
 // Google event IDs: 5-1024 chars of a-v and 0-9. A hex digest fits.
@@ -166,7 +170,7 @@ function toGoogleEvent(e: CalendarEvent) {
     id: eventId(e.date, e.slug),
     summary: e.title.trim(),
     location: e.location.trim(),
-    description: `${header.join('\n')}\n\n${e.description.trim()}\n\n${e.link}`,
+    description: e.generated ? e.description.trim() : `${header.join('\n')}\n\n${e.description.trim()}\n\n${e.link}`,
     source: { title: 'GraphQL Working Sessions', url: e.link },
     start: { dateTime: e.startUtc ?? `${e.date}T${e.startTime}:00`, timeZone: e.timeZone },
     end: { dateTime: e.endUtc ?? `${e.endDay}T${e.endTime}:00`, timeZone: e.timeZone },
