@@ -14,7 +14,7 @@ interface CalendarFS {
 }
 
 function checkPath(path: unknown, files: CalendarFS): asserts path is string {
-  if (typeof path !== 'string' || !/^calendar\/(?:[A-Za-z0-9_-]+\/)*[A-Za-z0-9_-]+\.ya?ml$/.test(path)) throw Error('Invalid calendar path')
+  if (typeof path !== 'string' || !/^calendar\/\d{4}\/\d{2}-\d{2}-[A-Za-z0-9_-]+\.ya?ml$/.test(path)) throw Error('Invalid calendar path')
   let prefix = ''
   for (const part of path.split('/')) {
     prefix = prefix ? prefix + '/' + part : part
