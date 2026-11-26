@@ -169,13 +169,17 @@ function getCalendar() {
   return { calendarId, cal: google.calendar({ version: 'v3', auth }) }
 }
 
+function errCode(err: unknown): unknown {
+  return err !== null && typeof err === 'object' && 'code' in err ? err.code : undefined
+}
+
 // Creates the event or, if its ID already exists (even as a cancelled event), updates it.
 async function upsert({ cal, calendarId }: ReturnType<typeof getCalendar>, body: ReturnType<typeof toGoogleEvent>) {
   try {
     await cal.events.insert({ calendarId, requestBody: body })
     return 'created'
   } catch (err) {
-    if (!isMapping(err) || err.code !== 409) throw err
+    if (errCode(err) !== 409) throw err
     await cal.events.update({ calendarId, eventId: body.id, requestBody: { ...body, status: 'confirmed' } })
     return 'updated'
   }
@@ -186,7 +190,8 @@ async function remove({ cal, calendarId }: ReturnType<typeof getCalendar>, id: s
     await cal.events.delete({ calendarId, eventId: id })
     return true
   } catch (err) {
-    if (isMapping(err) && (err.code === 404 || err.code === 410)) return false // already gone
+    const code = errCode(err)
+    if (code === 404 || code === 410) return false // already gone
     throw err
   }
 }
