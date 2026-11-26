@@ -35,18 +35,18 @@ link: https://github.com/graphql/working-sessions
 # endDay: 2026-11-06   # optional, for events spanning several days
 ```
 
-| Property      | Description                                                              |
-| ------------- | ------------------------------------------------------------------------ |
-| `startTime`   | Start time, 24h `HH:MM`, in `timeZone`. **Put it in quotes.**            |
-| `endTime`     | End time, 24h `HH:MM`, in `timeZone`, on the last day of the event. Must be after `startTime` unless `endDay` is set. |
-| `timeZone`    | [IANA time zone name](https://en.wikipedia.org/wiki/List_of_tz_database_time_zones), e.g. `America/New_York`, `Europe/Paris`, `UTC`. |
-| `endDay`      | *Optional.* Last day of a multi-day event, as `YYYY-MM-DD`. Defaults to the day in the file name. The event runs from `startTime` on the first day to `endTime` on `endDay`. |
-| `type`        | One of `conference`, `working group`, `workshop`, `meetup`, `meeting`.  |
-| `hostedBy`    | *Optional.* Free text: who hosts the event.                              |
-| `title`       | Event title.                                                             |
-| `location`    | Free text: a video call URL, an address, etc.                            |
-| `description` | Free text description.                                                   |
-| `link`        | `http(s)` URL with more information (agenda, notes, ...). It is also appended to the calendar event description. |
+| Property      | Description                                                                                                                                                                  |
+| ------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `startTime`   | Start time, 24h `HH:MM`, in `timeZone`. **Put it in quotes.**                                                                                                                |
+| `endTime`     | End time, 24h `HH:MM`, in `timeZone`, on the last day of the event. Must be after `startTime` unless `endDay` is set.                                                        |
+| `timeZone`    | [IANA time zone name](https://en.wikipedia.org/wiki/List_of_tz_database_time_zones), e.g. `America/New_York`, `Europe/Paris`, `UTC`.                                         |
+| `endDay`      | _Optional._ Last day of a multi-day event, as `YYYY-MM-DD`. Defaults to the day in the file name. The event runs from `startTime` on the first day to `endTime` on `endDay`. |
+| `type`        | One of `conference`, `working group`, `workshop`, `meetup`, `meeting`.                                                                                                       |
+| `hostedBy`    | _Optional._ Free text: who hosts the event.                                                                                                                                  |
+| `title`       | Event title.                                                                                                                                                                 |
+| `location`    | Free text: a video call URL, an address, etc.                                                                                                                                |
+| `description` | Free text description.                                                                                                                                                       |
+| `link`        | `http(s)` URL with more information (agenda, notes, ...). It is also appended to the calendar event description.                                                             |
 
 The calendar event description starts with the type and, if set, the host:
 
@@ -83,6 +83,7 @@ You can check your changes locally (Node 24):
 
 ```sh
 npm ci
+npm run format:check
 npm run typecheck
 npm run validate
 ```
