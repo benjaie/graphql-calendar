@@ -1,10 +1,10 @@
 # GraphQL calendar automation
 
-This folder holds data to modify the calendar at https://calendar.graphql.org
+The `calendar/` directory holds data to modify the calendar at https://calendar.graphql.org
 
-Every event of the working sessions calendar lives in this folder as a small YAML file.
+Every event of the working sessions calendar lives in `calendar/` as a small YAML file.
 
-When a change to this folder is merged to `main`, a GitHub Action updates the shared Google Calendar automatically. Never edit those events by hand in Google calendar: manual changes to synced events are overwritten on the next sync. It's OK to create other events manually in Google calendar but those events won't be handled by this repository.
+When a change to `calendar/` is merged to `main`, a GitHub Action updates the shared Google Calendar automatically. Never edit those events by hand in Google calendar: manual changes to synced events are overwritten on the next sync. It's OK to create other events manually in Google calendar but those events won't be handled by this repository.
 
 The data in the GraphQL calendar in turn is used to hydrate https://graphql.org/community/events/ so it's always best to add your event in the calendar as a source of truth.
 
@@ -82,8 +82,8 @@ Delete the file in a pull request. The event is removed from the Google Calendar
 You can check your changes locally (Node 20+):
 
 ```sh
-cd calendar/scripts && npm ci && cd -
-node calendar/scripts/sync.mjs --validate
+npm ci
+node scripts/sync.mjs --validate
 ```
 
 ## Maintainers: setup
@@ -95,4 +95,4 @@ The sync workflow (`.github/workflows/calendar-sync.yml`) needs two repository s
 
 Share the target calendar with the service account's email address with the **"Make changes to events"** permission.
 
-The workflow is incremental: on each push to `main` it only creates, updates or deletes the events of the files that changed in that push. Events not backed by a file in this folder are never touched.
+The workflow is incremental: on each push to `main` it only creates, updates or deletes the events of the files that changed in that push. Events not backed by a file in `calendar/` are never touched.

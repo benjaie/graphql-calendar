@@ -24,7 +24,6 @@ jobs:
         with:
           node-version: 22
       - run: npm ci --no-audit --no-fund
-        working-directory: calendar/scripts
       - name: Sync
         run: |
           # Only sync what changed since the previous tip of main.
@@ -32,7 +31,7 @@ jobs:
           if [ "$BASE_SHA" = "0000000000000000000000000000000000000000" ]; then
             export BASE_SHA=4b825dc642cb6eb9a060e54bf8d69288fbee4904
           fi
-          node calendar/scripts/sync.mjs
+          node scripts/sync.mjs
         env:
           BASE_SHA: ${{ github.event.before }}
           GOOGLE_SERVICE_ACCOUNT_KEY: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_KEY }}
