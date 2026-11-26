@@ -12,6 +12,8 @@
   },
   "packageManager": "npm@11.17.0",
   "scripts": {
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
     "typecheck": "tsc --noEmit",
     "validate": "node scripts/sync.ts --validate",
     "sync": "node scripts/sync.ts"
@@ -21,6 +23,23 @@
     "@tsconfig/node24": "^24.0.6",
     "@types/js-yaml": "^4.0.9",
     "@types/node": "^24.19.2",
+    "prettier": "3.10.1",
     "typescript": "^7.0.2"
+  },
+  "prettier": {
+    "semi": false,
+    "singleQuote": true,
+    "printWidth": 170,
+    "overrides": [
+      {
+        "files": [
+          "calendar/**/*.yaml",
+          "*.md"
+        ],
+        "options": {
+          "singleQuote": false
+        }
+      }
+    ]
   }
 }

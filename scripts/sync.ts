@@ -25,7 +25,7 @@ type CalendarEvent = RequiredFields & {
   endDay: string
   hostedBy?: string
 }
-type InvalidEvent = { path: string, errors: string[] }
+type InvalidEvent = { path: string; errors: string[] }
 
 function isMapping(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
@@ -198,11 +198,7 @@ async function remove({ cal, calendarId }: ReturnType<typeof getCalendar>, id: s
 
 // Only touches the files that changed between `base` and HEAD.
 async function syncIncremental(base: string) {
-  const diff = execFileSync(
-    'git',
-    ['diff', '--name-status', '--no-renames', '-z', base, 'HEAD', '--', 'calendar'],
-    { cwd: repoRoot, encoding: 'utf8' },
-  )
+  const diff = execFileSync('git', ['diff', '--name-status', '--no-renames', '-z', base, 'HEAD', '--', 'calendar'], { cwd: repoRoot, encoding: 'utf8' })
   // -z output: STATUS \0 path \0 STATUS \0 path ...
   const parts = diff.split('\0').filter(Boolean)
   const changes = []
