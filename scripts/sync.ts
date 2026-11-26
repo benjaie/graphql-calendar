@@ -1,25 +1,48 @@
 // Keeps a Google Calendar in sync with the YAML files in calendar/.
 //
-//   node sync.mjs --validate  only validate all the files (no credentials needed)
-//   BASE_SHA=<git-ref> node sync.mjs  sync the files added/changed/removed since <git-ref>
+//   npm run validate  only validate all the files (no credentials needed)
+//   BASE_SHA=<git-ref> npm run sync  sync the files added/changed/removed since <git-ref>
 //
 // Every file maps to exactly one event with a deterministic ID, so syncing is idempotent.
 import { execFileSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import { readdirSync, readFileSync, existsSync } from 'node:fs'
 import { join, relative, resolve } from 'node:path'
-import { fileURLToPath } from 'node:url'
 import { google } from 'googleapis'
 import yaml from 'js-yaml'
 
-const repoRoot = resolve(fileURLToPath(import.meta.url), '../..')
+const repoRoot = resolve(import.meta.dirname, '..')
 const calendarDir = join(repoRoot, 'calendar')
 const OPTIONAL_FIELDS = ['endDay', 'hostedBy']
-const FIELDS = ['startTime', 'endTime', 'timeZone', 'type', 'title', 'location', 'description', 'link']
+const FIELDS = ['startTime', 'endTime', 'timeZone', 'type', 'title', 'location', 'description', 'link'] as const
 const TYPES = ['conference', 'working group', 'workshop', 'meetup', 'meeting']
 
+type RequiredFields = Record<(typeof FIELDS)[number], string>
+type CalendarEvent = RequiredFields & {
+  path: string
+  date: string
+  slug: string
+  endDay: string
+  hostedBy?: string
+}
+type InvalidEvent = { path: string, errors: string[] }
+
+function isMapping(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+function hasRequiredFields(data: Record<string, unknown>, errors: string[]): data is RequiredFields & Record<string, unknown> {
+  for (const k of FIELDS) {
+    const value = data[k]
+    if (typeof value !== 'string' || value.trim() === '') {
+      errors.push(`"${k}" is required and must be a non-empty string (quote times, e.g. "14:00")`)
+    }
+  }
+  return errors.length === 0
+}
+
 function listEventFiles() {
-  const files = []
+  const files: string[] = []
   if (!existsSync(calendarDir)) return files
   for (const year of readdirSync(calendarDir, { withFileTypes: true })) {
     if (!year.isDirectory() || !/^\d{4}$/.test(year.name)) continue
@@ -34,7 +57,7 @@ function listEventFiles() {
 // calendar/<YYYY>/<MM>-<DD>[-<slug>].yaml. Several events can share a day if their slugs differ.
 const PATH_RE = /^calendar\/(\d{4})\/(\d{2})-(\d{2})(?:-([a-z0-9]+(?:-[a-z0-9]+)*))?\.yaml$/
 
-function isValidDate(iso) {
+function isValidDate(iso: string) {
   const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso)
   if (!m) return false
   const [, y, mo, d] = m
@@ -42,7 +65,7 @@ function isValidDate(iso) {
   return dt.getUTCFullYear() === +y && dt.getUTCMonth() === +mo - 1 && dt.getUTCDate() === +d
 }
 
-function parsePath(path) {
+function parsePath(path: string) {
   const m = PATH_RE.exec(path)
   if (!m) return { error: 'path must look like calendar/<YYYY>/<MM>-<DD>.yaml or calendar/<YYYY>/<MM>-<DD>-<slug>.yaml (slug: lowercase letters, digits and dashes)' }
   const [, y, mo, d, slug = ''] = m
@@ -52,42 +75,38 @@ function parsePath(path) {
   return { date: `${y}-${mo}-${d}`, slug }
 }
 
-function parseEvent(file) {
+function parseEvent(file: string): CalendarEvent | InvalidEvent {
   const path = relative(repoRoot, file)
-  const errors = []
+  const errors: string[] = []
   const { date, slug, error } = parsePath(path)
   if (error) errors.push(error)
 
-  let data
+  let data: unknown
   try {
     data = yaml.load(readFileSync(file, 'utf8'))
   } catch (e) {
-    return { path, errors: [...errors, `invalid YAML: ${e.message}`] }
+    return { path, errors: [...errors, `invalid YAML: ${e instanceof Error ? e.message : String(e)}`] }
   }
-  if (!data || typeof data !== 'object' || Array.isArray(data)) {
+  if (!isMapping(data)) {
     return { path, errors: [...errors, 'file must contain a YAML mapping'] }
   }
 
   for (const k of Object.keys(data)) {
-    if (!FIELDS.includes(k) && !OPTIONAL_FIELDS.includes(k)) errors.push(`unknown property "${k}"`)
+    if (!FIELDS.some((field) => field === k) && !OPTIONAL_FIELDS.includes(k)) errors.push(`unknown property "${k}"`)
   }
   // An unquoted 2026-11-06 is parsed as a Date by YAML
   if (data.endDay instanceof Date) data.endDay = data.endDay.toISOString().slice(0, 10)
-  for (const k of FIELDS) {
-    if (typeof data[k] !== 'string' || data[k].trim() === '') {
-      errors.push(`"${k}" is required and must be a non-empty string (quote times, e.g. "14:00")`)
-    }
-  }
-  if (errors.length) return { path, errors }
+  if (!hasRequiredFields(data, errors) || date === undefined) return { path, errors }
 
   if (!TYPES.includes(data.type)) {
     errors.push(`"type" must be one of ${TYPES.map((t) => `"${t}"`).join(', ')}, got "${data.type}"`)
   }
-  if (data.hostedBy !== undefined && (typeof data.hostedBy !== 'string' || data.hostedBy.trim() === '')) {
+  const hostedBy = typeof data.hostedBy === 'string' ? data.hostedBy : undefined
+  if (data.hostedBy !== undefined && !hostedBy?.trim()) {
     errors.push('"hostedBy" must be a non-empty string when set')
   }
   const time = /^([01]\d|2[0-3]):[0-5]\d$/
-  for (const k of ['startTime', 'endTime']) {
+  for (const k of ['startTime', 'endTime'] as const) {
     if (!time.test(data[k])) errors.push(`"${k}" must be HH:MM in 24h format, got "${data[k]}"`)
   }
   let endDay = date
@@ -116,14 +135,14 @@ function parseEvent(file) {
   }
   if (errors.length) return { path, errors }
 
-  return { path, errors, ...data, date, slug, endDay }
+  return { ...data, path, date, slug, endDay, hostedBy }
 }
 
 // Google event IDs: 5-1024 chars of a-v and 0-9. A hex digest fits.
 // The ID depends on the date and slug only.
-const eventId = (date, slug) => 'gql' + createHash('sha1').update(`${date}/${slug}`).digest('hex')
+const eventId = (date: string, slug: string) => 'gql' + createHash('sha1').update(`${date}/${slug}`).digest('hex')
 
-function toGoogleEvent(e) {
+function toGoogleEvent(e: CalendarEvent) {
   const header = [`type: ${e.type}`]
   if (e.hostedBy !== undefined) header.push(`hostedBy: ${e.hostedBy.trim()}`)
   return {
@@ -150,30 +169,35 @@ function getCalendar() {
   return { calendarId, cal: google.calendar({ version: 'v3', auth }) }
 }
 
+function errCode(err: unknown): unknown {
+  return err !== null && typeof err === 'object' && 'code' in err ? err.code : undefined
+}
+
 // Creates the event or, if its ID already exists (even as a cancelled event), updates it.
-async function upsert({ cal, calendarId }, body) {
+async function upsert({ cal, calendarId }: ReturnType<typeof getCalendar>, body: ReturnType<typeof toGoogleEvent>) {
   try {
     await cal.events.insert({ calendarId, requestBody: body })
     return 'created'
   } catch (err) {
-    if (err.code !== 409) throw err
+    if (errCode(err) !== 409) throw err
     await cal.events.update({ calendarId, eventId: body.id, requestBody: { ...body, status: 'confirmed' } })
     return 'updated'
   }
 }
 
-async function remove({ cal, calendarId }, id) {
+async function remove({ cal, calendarId }: ReturnType<typeof getCalendar>, id: string) {
   try {
     await cal.events.delete({ calendarId, eventId: id })
     return true
   } catch (err) {
-    if (err.code === 404 || err.code === 410) return false // already gone
+    const code = errCode(err)
+    if (code === 404 || code === 410) return false // already gone
     throw err
   }
 }
 
 // Only touches the files that changed between `base` and HEAD.
-async function syncIncremental(base) {
+async function syncIncremental(base: string) {
   const diff = execFileSync(
     'git',
     ['diff', '--name-status', '--no-renames', '-z', base, 'HEAD', '--', 'calendar'],
@@ -200,8 +224,8 @@ async function syncIncremental(base) {
   for (const e of toUpsert) console.log(`${e.path}: ${await upsert(client, toGoogleEvent(e))}`)
 }
 
-function failOnInvalid(events) {
-  const invalid = events.filter((e) => e.errors.length)
+function failOnInvalid(events: (CalendarEvent | InvalidEvent)[]): asserts events is CalendarEvent[] {
+  const invalid = events.filter((e) => 'errors' in e)
   for (const e of invalid) {
     for (const msg of e.errors) console.error(`::error file=${e.path}::${msg}`)
   }
@@ -218,6 +242,6 @@ if (process.argv.includes('--validate')) {
 } else if (process.env.BASE_SHA) {
   await syncIncremental(process.env.BASE_SHA)
 } else {
-  console.error('usage: sync.mjs --validate, or set BASE_SHA to the git ref to sync from')
+  console.error('usage: npm run validate, or BASE_SHA=<git-ref> npm run sync')
   process.exit(2)
 }
