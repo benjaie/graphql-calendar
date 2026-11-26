@@ -1,4 +1,4 @@
-// Keeps a Google Calendar in sync with the YAML files in /calendar.
+// Keeps a Google Calendar in sync with the YAML files in calendar/.
 //
 //   node sync.mjs --validate  only validate all the files (no credentials needed)
 //   BASE_SHA=<git-ref> node sync.mjs  sync the files added/changed/removed since <git-ref>
@@ -12,7 +12,7 @@ import { fileURLToPath } from 'node:url'
 import { google } from 'googleapis'
 import yaml from 'js-yaml'
 
-const repoRoot = resolve(fileURLToPath(import.meta.url), '../../..')
+const repoRoot = resolve(fileURLToPath(import.meta.url), '../..')
 const calendarDir = join(repoRoot, 'calendar')
 const OPTIONAL_FIELDS = ['endDay', 'hostedBy']
 const FIELDS = ['startTime', 'endTime', 'timeZone', 'type', 'title', 'location', 'description', 'link']
