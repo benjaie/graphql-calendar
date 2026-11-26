@@ -1,7 +1,7 @@
 // Keeps a Google Calendar in sync with the YAML files in calendar/.
 //
-//   node sync.ts --validate  only validate all the files (no credentials needed)
-//   BASE_SHA=<git-ref> node sync.ts  sync the files added/changed/removed since <git-ref>
+//   npm run validate  only validate all the files (no credentials needed)
+//   BASE_SHA=<git-ref> npm run sync  sync the files added/changed/removed since <git-ref>
 //
 // Every file maps to exactly one event with a deterministic ID, so syncing is idempotent.
 import { execFileSync } from 'node:child_process'
@@ -242,6 +242,6 @@ if (process.argv.includes('--validate')) {
 } else if (process.env.BASE_SHA) {
   await syncIncremental(process.env.BASE_SHA)
 } else {
-  console.error('usage: sync.ts --validate, or set BASE_SHA to the git ref to sync from')
+  console.error('usage: npm run validate, or BASE_SHA=<git-ref> npm run sync')
   process.exit(2)
 }

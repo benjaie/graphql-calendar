@@ -84,7 +84,7 @@ You can check your changes locally (Node 24):
 ```sh
 npm ci
 npm run typecheck
-node scripts/sync.ts --validate
+npm run validate
 ```
 
 ## Maintainers: setup

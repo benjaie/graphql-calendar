@@ -13,4 +13,4 @@ jobs:
           node-version: 24
       - run: npm ci --no-audit --no-fund
       - run: npm run typecheck
-      - run: node scripts/sync.ts --validate
+      - run: npm run validate
