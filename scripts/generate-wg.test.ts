@@ -6,8 +6,7 @@ import { calendarEvent, obsoleteEvents } from './generate-wg.ts'
 import { generatedMarker } from './wg-event.ts'
 
 test('renders a nested WG agenda with a prefilled host and a configured duration', async () => {
-  const host = { name: 'Host', github: 'host', org: '', location: '' }
-  const file = 'working-group/agendas/meeting.md'
+  const file = 'scripts/fixtures/working-group/agendas/meeting.md'
   const config = {
     repoSubpath: 'scripts/fixtures/working-group',
     name: 'Test WG',
@@ -17,18 +16,16 @@ test('renders a nested WG agenda with a prefilled host and a configured duration
     frequency: 'monthly',
     weekday: 'Th',
     videoConferenceDetails: 'Test',
-    attendeesTemplate: '',
+    attendeesTemplate: '| Name | GitHub | Organization | Location |\n| --- | --- | --- | --- |\n| Host | @host | | |',
   } satisfies Parameters<typeof getAgendaDetails>[0]
   const { meetings } = await getAgendaDetails(config, {})
   assert.equal(meetings.length, 1)
   const event = calendarEvent({
     repo: 'graphql-over-http',
     branch: 'main',
-    file,
-    contents: readFileSync('scripts/fixtures/' + file, 'utf8'),
+    contents: readFileSync(file, 'utf8'),
     config,
     meeting: meetings[0],
-    baseline: { attendees: [host] },
   })
   assert.equal(event.title, 'Be first: Fixture meeting')
   assert.equal(event.endUtc, '2099-01-02T11:00:00.000Z')

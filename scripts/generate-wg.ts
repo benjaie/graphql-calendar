@@ -1,10 +1,9 @@
 import { execFileSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
-import { existsSync, globSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
-import { tmpdir } from 'node:os'
-import { basename, dirname, join, resolve } from 'node:path'
+import { existsSync, globSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { basename, dirname, join, resolve, sep } from 'node:path'
 import yaml from 'js-yaml'
-import { generateAgendas, getAgendaDate, getAgendaDetails, looksLikeItMightHaveBeenCancelled } from 'wgutils'
+import { getAgendaDate, type getAgendaDetails, looksLikeItMightHaveBeenCancelled } from 'wgutils'
 import { parseEventContents } from './sync.ts'
 import { agendaOverview, generatedMarker, localTime, tentative, zoomPassword } from './wg-event.ts'
 
@@ -50,13 +49,6 @@ function refresh(repo: string) {
   return dir
 }
 
-async function one(config: Config, contents: string) {
-  writeFileSync('single/agenda.md', contents)
-  const { meetings } = await getAgendaDetails({ ...config, repoSubpath: '', agendasFolder: 'single' }, {})
-  if (meetings.length !== 1) throw Error('Expected one meeting')
-  return meetings[0]
-}
-
 function fallbackEnd(start: string, range: string) {
   const m = /^(\d\d?):(\d\d)-(\d\d?):(\d\d)$/.exec(range)
   if (!m) throw Error('Missing agenda end and invalid configured duration')
@@ -67,31 +59,21 @@ function fallbackEnd(start: string, range: string) {
 export function calendarEvent({
   repo,
   branch,
-  file,
   contents,
   config,
   meeting,
-  baseline,
   secondary,
 }: {
   repo: string
   branch: string
-  file: string
   contents: string
   config: Pick<Config, 'time' | 'timezone' | 'description' | 'name'>
   meeting: Meeting
-  baseline: Pick<Meeting, 'attendees'>
   secondary?: { time: string; description?: string }
 }) {
   const start = localTime(meeting.start, config.timezone)
   const topics = agendaOverview(meeting.topics)
-  const participants = meeting.attendees.filter(
-    (a) =>
-      !baseline.attendees.some((b) =>
-        a.github && b.github ? a.github.toLowerCase() === b.github.toLowerCase() : a.name.trim().toLowerCase() === b.name.trim().toLowerCase(),
-      ),
-  )
-  const notice = tentative(!!topics.length, !!participants.length)
+  const notice = tentative(!!topics.length, meeting.hasSignups)
   const endUtc = meeting.end ?? fallbackEnd(meeting.start, secondary?.time ?? config.time)
   const end = localTime(endUtc, config.timezone)
   const intro =
@@ -101,7 +83,7 @@ export function calendarEvent({
       .split(/\n\s*\n/)[0]
       .replace(/\n/g, ' ')
       .replace(/\[([^\]]+)\](?:\[.*?\]|\([^)]*\))/g, '$1')
-  const link = `https://github.com/graphql/${repo}/blob/${branch}/${file.split('/').map(encodeURIComponent).join('/')}`
+  const link = `https://github.com/graphql/${repo}/blob/${branch}/${meeting.path.split('/').map(encodeURIComponent).join('/')}`
   const password = zoomPassword(contents)
   return {
     startTime: start.time,
@@ -128,12 +110,12 @@ export function calendarEvent({
   }
 }
 
-async function collect(repo: string, scratch: string) {
+async function collect(repo: string) {
   const dir = refresh(repo)
   const config: Config = (await import(join(dir, 'wg.config.js'))).default
   const folder = join(config.repoSubpath ?? '', config.agendasFolder ?? 'agendas')
   if (!existsSync(join(dir, folder))) throw Error(`Missing agenda directory in ${repo}`)
-  const files = globSync('**/*.md', { cwd: join(dir, folder) }).map((f) => join(folder, f))
+  const files = globSync('**/*.md', { cwd: join(dir, folder) }).map((f) => join(folder, f).split(sep).join('/'))
   const candidates = files.filter((file) => {
     const contents = read(join(dir, file))
     if (looksLikeItMightHaveBeenCancelled(contents)) return false
@@ -150,7 +132,7 @@ async function collect(repo: string, scratch: string) {
         .join('-'),
     ),
   )
-  const actual: Meeting[] = []
+  const meetings = new Map<string, Meeting>()
   for (const month of months) {
     const filter = month?.split('-') ?? []
     const json = execFileSync(join(root, 'node_modules/.bin/wgutils'), ['agenda', 'details', ...filter, '--json'], {
@@ -158,37 +140,19 @@ async function collect(repo: string, scratch: string) {
       encoding: 'utf8',
       maxBuffer: 64 * 1024 * 1024,
     })
-    actual.push(...JSON.parse(json).meetings)
+    for (const meeting of JSON.parse(json).meetings as Meeting[]) meetings.set(meeting.path, meeting)
   }
-  const work = join(scratch, repo)
-  mkdirSync(join(work, 'single'), { recursive: true })
-  process.chdir(work)
-  const templates = new Map<string, Meeting>()
   const branch = git(dir, 'ls-remote', '--symref', 'origin', 'HEAD').match(/ref: refs\/heads\/(.+)\s+HEAD/)?.[1]
   if (!branch) throw Error(`Missing default branch for ${repo}`)
   for (const file of candidates) {
     try {
       const contents = read(join(dir, file))
-      const startUtc = getAgendaDate(contents)!.toISOString()
-      const matches = actual.filter((m) => m.start === startUtc)
-      if (!matches.length) throw Error('wgutils omitted upcoming agenda')
-      const meeting = matches.length === 1 ? matches[0] : await one(config, contents)
+      const meeting = meetings.get(file)
+      if (!meeting) throw Error('wgutils omitted upcoming agenda')
       const start = localTime(meeting.start, config.timezone)
-      const [year, month] = start.date.split('-')
-      const templateDir = join(work, 'templates', year, `${month}-*`)
-      if (!globSync(templateDir).length)
-        await generateAgendas({ ...config, repoSubpath: '', agendasFolder: 'templates', joiningAMeetingFile: undefined }, { year, month })
-      const choices = globSync(join(templateDir, '*.md')).sort()
-      const fragment = basename(file).slice(3)
-      const template = choices.find((p) => basename(p).slice(3) === fragment) ?? choices.find((p) => basename(p).startsWith(start.date.slice(8) + '-')) ?? choices[0]
-      if (!template) throw Error('No matching meeting template')
-      if (!templates.has(template)) {
-        // A past pristine template would be skipped by the low-attendance filter.
-        templates.set(template, await one(config, read(template).replace(/\?iso=\d{8}T\d{6}&/, '?iso=20991201T120000&')))
-      }
-      const baseline = templates.get(template)!
-      const secondary = config.secondaryMeetings?.find((s) => s.filenameFragment && basename(template).slice(3) === s.filenameFragment + '.md')
-      const event = calendarEvent({ repo, branch, file, contents, config, meeting, baseline, secondary })
+      const year = start.date.slice(0, 4)
+      const secondary = config.secondaryMeetings?.find((s) => s.filenameFragment && basename(file).slice(3) === s.filenameFragment + '.md')
+      const event = calendarEvent({ repo, branch, contents, config, meeting, secondary })
       const path = `calendar/${year}/${start.date.slice(5)}-${repo}-${createHash('sha256').update(file).digest('hex').slice(0, 10)}.yaml`
       const body = generatedMarker + repo + '/' + file + '\n' + yaml.dump(event, { lineWidth: -1, quotingType: '"' })
       const parsed = parseEventContents(body, path)
@@ -214,21 +178,15 @@ export function obsoleteEvents(existing: Map<string, string>, desired: Map<strin
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === import.meta.filename) {
-  const scratch = mkdtempSync(join(tmpdir(), 'calendar-wg-'))
-  try {
-    mkdirSync(join(root, 'repos'), { recursive: true })
-    for (const repo of repos) await collect(repo, scratch)
-    process.chdir(root)
-    const existing = new Map(globSync('calendar/*/*.yaml').map((file) => [file, read(file)]))
-    const remove = obsoleteEvents(existing, desired, unparseableSources)
-    for (const [file, body] of desired) {
-      mkdirSync(dirname(file), { recursive: true })
-      if (existing.get(file) !== body) writeFileSync(file, body)
-    }
-    for (const file of remove) rmSync(file)
-    console.log(`${desired.size} upcoming WG events, ${remove.length} removed`)
-  } finally {
-    process.chdir(root)
-    rmSync(scratch, { recursive: true, force: true })
+  process.chdir(root)
+  mkdirSync(join(root, 'repos'), { recursive: true })
+  for (const repo of repos) await collect(repo)
+  const existing = new Map(globSync('calendar/*/*.yaml').map((file) => [file, read(file)]))
+  const remove = obsoleteEvents(existing, desired, unparseableSources)
+  for (const [file, body] of desired) {
+    mkdirSync(dirname(file), { recursive: true })
+    if (existing.get(file) !== body) writeFileSync(file, body)
   }
+  for (const file of remove) rmSync(file)
+  console.log(`${desired.size} upcoming WG events, ${remove.length} removed`)
 }
