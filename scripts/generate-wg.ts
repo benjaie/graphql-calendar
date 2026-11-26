@@ -34,8 +34,6 @@ const introductions: Record<string, string> = {
 const now = new Date()
 const until = Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 4, 1)
 const inWindow = (date: Date) => +date >= +now && +date < until
-const desired = new Map<string, string>()
-const unparseableSources = new Set<string>()
 const git = (cwd: string, ...args: string[]) => execFileSync('git', args, { cwd, encoding: 'utf8' }).trim()
 const read = (path: string) => readFileSync(path, 'utf8')
 
@@ -110,7 +108,7 @@ export function calendarEvent({
   }
 }
 
-async function collect(repo: string) {
+async function collect(repo: string, desired: Map<string, string>, unparseableSources: Set<string>) {
   const dir = refresh(repo)
   const config: Config = (await import(join(dir, 'wg.config.js'))).default
   const folder = join(config.repoSubpath ?? '', config.agendasFolder ?? 'agendas')
@@ -180,7 +178,9 @@ export function obsoleteEvents(existing: Map<string, string>, desired: Map<strin
 if (process.argv[1] && resolve(process.argv[1]) === import.meta.filename) {
   process.chdir(root)
   mkdirSync(join(root, 'repos'), { recursive: true })
-  for (const repo of repos) await collect(repo)
+  const desired = new Map<string, string>()
+  const unparseableSources = new Set<string>()
+  for (const repo of repos) await collect(repo, desired, unparseableSources)
   const existing = new Map(globSync('calendar/*/*.yaml').map((file) => [file, read(file)]))
   const remove = obsoleteEvents(existing, desired, unparseableSources)
   for (const [file, body] of desired) {
