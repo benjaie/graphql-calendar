@@ -122,4 +122,4 @@ Generated WG descriptions are synced verbatim. They open with the “Be first”
 
 The importer covers upcoming meetings through the end of the third following UTC month. It marks files with their source path and removes future generated events when their agenda disappears or wgutils recognizes a cancellation. The paired optional fields `startUtc` and `endUtc` preserve exact instants alongside WG-local dates and times.
 
-The agenda refresh workflow runs at 00:17 and 12:17 UTC and supports manual dispatch on main. When generation changes calendar entries, it commits them locally, syncs the diff from the parent commit to Google Calendar, and then pushes the commit to main. The job needs permission to push to main.
+The agenda refresh workflow runs at 00:17 and 12:17 UTC and supports manual dispatch on main. When generation changes calendar entries, it pushes the generated commit to main. A separate job syncs that exact commit against its parent. If Google Calendar returns an error, use “Re-run failed jobs” to retry the published diff. The job needs permission to push to main.

@@ -136,7 +136,7 @@ export function parseEvent(file: string, logicalPath?: string): CalendarEvent | 
         [data.startUtc, date, data.startTime],
         [data.endUtc, endDay, data.endTime],
       ]) {
-        if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(value) || !Number.isFinite(Date.parse(value))) {
+        if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(value) || new Date(value).toJSON() !== value) {
           errors.push('startUtc and endUtc must both be quoted UTC ISO timestamps')
           continue
         }
